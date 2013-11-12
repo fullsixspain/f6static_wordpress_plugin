@@ -17,6 +17,7 @@
 $uploadDir = wp_upload_dir();
 
 $f6static_baseUrl = get_option('f6static_baseUrl', home_url());
+$f6static_additionalUrls = get_option('f6static_additionalUrls', '');
 $f6static_basePath = get_option('f6static_basePath', $uploadDir['basedir'] .'/f6static/');
 $f6static_defaultFilename = get_option('f6static_defaultFilename', 'index.html');
 $f6static_dynamic = get_option('f6static_dynamic', false);
@@ -25,7 +26,7 @@ $f6static_runScript = get_option('f6static_runScript', false);
 
 function f6static_render_tools_page()
 {
-    global $f6static_baseUrl, $f6static_basePath, $f6static_defaultFilename, $f6static_dynamic, $f6static_dynamicToken, $f6static_runScript;
+    global $f6static_baseUrl, $f6static_additionalUrls, $f6static_basePath, $f6static_defaultFilename, $f6static_dynamic, $f6static_dynamicToken, $f6static_runScript;
     do_action('f6static-saveOptions');
 ?>
     <div class="wrap">
@@ -41,6 +42,10 @@ function f6static_render_tools_page()
                                 <p>
                                     <label for="baseUrl">Static site base URL:</label>
                                     <input type="text" id="baseUrl" name="baseUrl" value="<?php echo esc_attr($f6static_baseUrl) ?>" size="50" />
+                                </p>
+                                <p>
+                                    <label for="additionalUrls">Additional Urls (one per line):</label>
+                                    <textarea class="widefat" name="additionalUrls" id="additionalUrls" rows="3" cols="40"><?php echo esc_attr($f6static_additionalUrls) ?></textarea>
                                 </p>
                                 <p>
                                     <label for="basePath">Static site base path:</label>
@@ -81,19 +86,21 @@ function f6static_render_tools_page()
 
 function f6static_save_options()
 {
-    global $f6static_baseUrl, $f6static_basePath, $f6static_defaultFilename, $f6static_dynamic, $f6static_dynamicToken, $f6static_runScript;
+    global $f6static_baseUrl, $f6static_additionalUrls, $f6static_basePath, $f6static_defaultFilename, $f6static_dynamic, $f6static_dynamicToken, $f6static_runScript;
     if ($_SERVER['REQUEST_METHOD'] != 'POST') return;
     if (!check_admin_referer('f6static-options') || !current_user_can('manage_options')) {
         exit('Security risk');
     }
     /* Save data */
     $f6static_baseUrl = $_POST['baseUrl'];
+    $f6static_additionalUrls = $_POST['additionalUrls'];
     $f6static_basePath = $_POST['basePath'];
     $f6static_defaultFilename = $_POST['defaultFilename'];
     $f6static_dynamic = isset($_POST['dynamic']);
     $f6static_dynamicToken = $_POST['dynamicToken'];
     $f6static_runScript = isset($_POST['runScript']);
     update_option('f6static_baseUrl', $f6static_baseUrl);
+    update_option('f6static_additionalUrls', $f6static_additionalUrls);
     update_option('f6static_basePath', $f6static_basePath);
     update_option('f6static_defaultFilename', $f6static_defaultFilename);
     update_option('f6static_dynamic', $f6static_dynamic);
@@ -113,19 +120,27 @@ function f6static_register_settings()
 
 function f6static_generate()
 {
-    global $f6static_baseUrl, $f6static_basePath, $f6static_defaultFilename, $f6static_dynamic, $f6static_dynamicToken, $f6static_runScript;
+    global $f6static_baseUrl, $f6static_additionalUrls, $f6static_basePath, $f6static_defaultFilename, $f6static_dynamic, $f6static_dynamicToken, $f6static_runScript;
     $basePath = trailingslashit($f6static_basePath);
+    $additionalUrls = explode("\n", $f6static_additionalUrls);
+    if ($additionalUrls === false) $additionalUrls = array();
+    for ($i = 0; $i < count($additionalUrls); $i++) {
+        $additionalUrls[$i] = trim($additionalUrls[$i]);
+    }
     $baseUrl = untrailingslashit(home_url());
     $baseUrlSlash = trailingslashit($baseUrl);
     $newBaseUrl = untrailingslashit($f6static_baseUrl);
     $remainingUrls = array_unique(array_merge(
             array($baseUrlSlash),
-            array() // TODO: Add theme files?
+            $additionalUrls
         ));
+    $baseUrlLength = strlen($baseUrl);
     $doneUrls = array();
     while (count($remainingUrls)) {
         /* Get url */
         $url = array_shift($remainingUrls);
+        /* Valid url? */
+        if (strlen($url) < $baseUrlLength || substr($url, 0, $baseUrlLength) != $baseUrl) continue;
         /* Already downloaded? */
         if (in_array($url, $doneUrls)) continue;
         /* Fetch page */
